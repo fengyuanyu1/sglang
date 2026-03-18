@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+import random
 import re
 import subprocess
 import uuid
@@ -286,16 +287,41 @@ class RandomDataset(BaseDataset):
         super().__init__(args, api_url, model)
         self.num_prompts = args.num_prompts or 100
 
+        self.random_request_config = getattr(args, "random_request_config", None)
+        if self.random_request_config:
+            self.random_request_config = json.loads(self.random_request_config)
+            weights = [p["weight"] for p in self.random_request_config]
+            self.random_request_config = [
+                {k: v for k, v in p.items() if k != "weight"}
+                for p in self.random_request_config
+            ]
+            seed = getattr(args, "random_request_seed", 42)
+            rng = random.Random(seed)
+            self._sampled_requests = rng.choices(
+                self.random_request_config, weights=weights, k=self.num_prompts
+            )
+        else:
+            self._sampled_requests = None
+
     def __len__(self) -> int:
         return self.num_prompts
 
     def __getitem__(self, idx: int) -> RequestFuncInput:
+        params = {
+            "width": self.args.width,
+            "height": self.args.height,
+            "num_frames": self.args.num_frames,
+            "num_inference_steps": self.args.num_inference_steps,
+            "fps": self.args.fps,
+        }
+
+        if self._sampled_requests:
+            profile = self._sampled_requests[idx]
+            params.update(profile)
+
         return RequestFuncInput(
             prompt=f"Random prompt {idx} for benchmarking diffusion models",
             api_url=self.api_url,
             model=self.model,
-            width=self.args.width,
-            height=self.args.height,
-            num_frames=self.args.num_frames,
-            fps=self.args.fps,
+            **params,
         )
