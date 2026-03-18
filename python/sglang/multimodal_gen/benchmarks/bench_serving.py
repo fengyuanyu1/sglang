@@ -720,6 +720,25 @@ if __name__ == "__main__":
     parser.add_argument("--width", type=int, default=None, help="Image/Video width.")
     parser.add_argument("--height", type=int, default=None, help="Image/Video height.")
     parser.add_argument(
+        "--random-request-config",
+        type=str,
+        default=None,
+        help=(
+            "JSON string defining random request profiles. "
+            "Each profile may contain: width, height, num_inference_steps, etc. "
+            "The 'weight' field controls sampling probability (relative weight). "
+            "Example: "
+            '[{"width":512,"height":512,"num_inference_steps":20,"weight":0.15},'
+            '{"width":768,"height":768,"num_inference_steps":20,"weight":0.85}]'
+        ),
+    )
+    parser.add_argument(
+        "--random-request-seed",
+        type=int,
+        default=42,
+        help="Random seed for sampling request profiles (default: 42).",
+    )
+    parser.add_argument(
         "--num-frames", type=int, default=None, help="Number of frames (for video)."
     )
     parser.add_argument("--fps", type=int, default=None, help="FPS (for video).")
