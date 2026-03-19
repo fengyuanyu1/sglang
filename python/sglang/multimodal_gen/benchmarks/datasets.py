@@ -299,6 +299,12 @@ class RandomDataset(BaseDataset):
         else:
             self._sampled_requests = None
 
+    def get_sampling_params(self, idx: int) -> dict:
+        """Return the per-request sampling profile dict, or empty dict if not mix-diffusion."""
+        if self._sampled_requests:
+            return self._sampled_requests[idx]
+        return {}
+
     def __len__(self) -> int:
         return self.num_prompts
 
