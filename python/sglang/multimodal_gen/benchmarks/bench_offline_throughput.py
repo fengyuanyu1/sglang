@@ -81,6 +81,8 @@ class BenchArgs:
     task_name: str = "unknown"
     num_prompts: int = 10
     batch_size: int = 1
+    random_request_config: str = None
+    random_request_seed: int = 42
 
     # Benchmark Execution
     skip_warmup: bool = False
@@ -151,6 +153,23 @@ class BenchArgs:
             help="Batch size per generation call (currently only bs=1 is supported)",
         )
 
+        parser.add_argument(
+            "--random-request-config",
+            type=str,
+            default=None,
+            help=(
+                "JSON string defining random request profiles. "
+                "Each profile may contain: width, height, num_inference_steps, etc. "
+                "The 'weight' field controls sampling probability (relative weight)."
+            ),
+        )
+        parser.add_argument(
+            "--random-request-seed",
+            type=int,
+            default=42,
+            help="Random seed for sampling request profiles (default: 42).",
+        )
+
         # Benchmark Execution
         parser.add_argument(
             "--skip-warmup", action="store_true", help="Skip warmup batch"
@@ -186,17 +205,22 @@ def generate_batch(
     engine: DiffGenerator,
     bench_args: BenchArgs,
     prompts: List[str],
-    user_sampling_params: Dict[str, Any],
+    user_sampling_params: List[Dict[str, Any]],
 ) -> BatchOutput:
     """Generate batch of images/videos synchronously."""
+    assert len(user_sampling_params) == len(prompts), (
+        f"user_sampling_params length ({len(user_sampling_params)}) must match "
+        f"prompts length ({len(prompts)})"
+    )
+
     output = BatchOutput()
     start_time = time.perf_counter()
 
     torch.cuda.reset_peak_memory_stats()
 
-    for prompt in prompts:
+    for prompt, params in zip(prompts, user_sampling_params):
         try:
-            sampling_params_kwargs = dict(user_sampling_params)
+            sampling_params_kwargs = dict(params)
             sampling_params_kwargs["prompt"] = prompt
             result = engine.generate(sampling_params_kwargs=sampling_params_kwargs)
 
@@ -281,7 +305,7 @@ def throughput_test(
     else:
         raise ValueError(f"Unknown dataset: {bench_args.dataset}")
 
-    sampling_params = {
+    _sampling_params = {
         "guidance_scale": bench_args.guidance_scale,
         "num_inference_steps": bench_args.num_inference_steps,
         "height": bench_args.height,
@@ -290,18 +314,29 @@ def throughput_test(
         "seed": bench_args.seed,
     }
     if bench_args.disable_safety_checker:
-        sampling_params["safety_checker"] = None
+        _sampling_params["safety_checker"] = None
+
+    total_count = min(bench_args.num_prompts, len(dataset))
+    all_prompts = [dataset[i].prompt for i in range(total_count)]
+
+    if bench_args.random_request_config:
+        all_sampling_params = []
+        for i in range(total_count):
+            params = dict(_sampling_params)
+            params.update(dataset.get_sampling_params(i))
+            all_sampling_params.append(params)
+    else:
+        all_sampling_params = [_sampling_params] * total_count
 
     if not bench_args.skip_warmup:
         logger.info("Running warmup batch...")
-        warmup_count = min(bench_args.batch_size, len(dataset))
-        warmup_prompts = [dataset[i].prompt for i in range(warmup_count)]
-        generate_batch(engine, bench_args, warmup_prompts, sampling_params)
+        warmup_count = min(bench_args.batch_size, total_count)
+        warmup_prompts = all_prompts[:warmup_count]
+        warmup_sampling_params = all_sampling_params[:warmup_count]
+        generate_batch(engine, bench_args, warmup_prompts, warmup_sampling_params)
 
     logger.info(f"Running benchmark with {bench_args.num_prompts} prompts...")
     outputs: List[BatchOutput] = []
-    total_count = min(bench_args.num_prompts, len(dataset))
-    all_prompts = [dataset[i].prompt for i in range(total_count)]
 
     start_time = time.perf_counter()
 
@@ -315,9 +350,10 @@ def throughput_test(
     for batch_start in range(0, total_count, bench_args.batch_size):
         batch_end = min(batch_start + bench_args.batch_size, total_count)
         batch_prompts = all_prompts[batch_start:batch_end]
+        batch_sampling_params = all_sampling_params[batch_start:batch_end]
 
         batch_output = generate_batch(
-            engine, bench_args, batch_prompts, sampling_params
+            engine, bench_args, batch_prompts, batch_sampling_params
         )
         outputs.append(batch_output)
 
