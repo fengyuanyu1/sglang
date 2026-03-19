@@ -522,6 +522,11 @@ async def benchmark(args):
 
     setattr(args, "task_name", task_name)
 
+    if args.random_request_config and args.dataset != "random":
+        raise ValueError(
+            "--random-request-config can only be used with --dataset random"
+        )
+
     if args.dataset == "vbench":
         dataset = VBenchDataset(args, api_url, args.model)
     elif args.dataset == "random":

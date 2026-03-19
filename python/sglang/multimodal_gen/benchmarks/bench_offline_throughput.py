@@ -29,7 +29,7 @@ import dataclasses
 import json
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 from tqdm import tqdm
@@ -251,6 +251,7 @@ def calculate_metrics(
     total_duration: float,
     resolution: Tuple[int, int, int],
     num_requests: int,
+    all_sampling_params: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Calculate generation-specific throughput metrics."""
     successful = [o for o in outputs if o.success]
@@ -259,8 +260,15 @@ def calculate_metrics(
     peak_memory = max((o.peak_memory_mb for o in outputs), default=0)
 
     width, height, frames = resolution
-    pixels_per_sample = width * height * frames
-    total_pixels = num_success * pixels_per_sample
+    if all_sampling_params:
+        total_pixels = sum(
+            p.get("width", width)
+            * p.get("height", height)
+            * p.get("num_frames", frames)
+            for p in all_sampling_params[:num_success]
+        )
+    else:
+        total_pixels = num_success * width * height * frames
 
     metrics = {
         "num_requests": num_requests,
@@ -295,6 +303,11 @@ def throughput_test(
     logger.info("Starting offline throughput benchmark...")
 
     engine = initialize_engine(server_args)
+
+    if bench_args.random_request_config and bench_args.dataset != "random":
+        raise ValueError(
+            "--random-request-config can only be used with --dataset random"
+        )
 
     logger.info(f"Loading {bench_args.dataset} dataset...")
     if bench_args.dataset == "vbench":
@@ -368,6 +381,7 @@ def throughput_test(
         total_duration,
         resolution=resolution,
         num_requests=total_count,
+        all_sampling_params=all_sampling_params,
     )
 
     display_results(
