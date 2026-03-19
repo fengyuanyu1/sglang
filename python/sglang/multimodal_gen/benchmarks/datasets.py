@@ -287,15 +287,11 @@ class RandomDataset(BaseDataset):
         super().__init__(args, api_url, model)
         self.num_prompts = args.num_prompts or 100
 
-        self.random_request_config = getattr(args, "random_request_config", None)
+        self.random_request_config = args.random_request_config
         if self.random_request_config:
             self.random_request_config = json.loads(self.random_request_config)
-            weights = [p["weight"] for p in self.random_request_config]
-            self.random_request_config = [
-                {k: v for k, v in p.items() if k != "weight"}
-                for p in self.random_request_config
-            ]
-            seed = getattr(args, "random_request_seed", 42)
+            weights = [p.pop("weight") for p in self.random_request_config]
+            seed = args.random_request_seed
             rng = random.Random(seed)
             self._sampled_requests = rng.choices(
                 self.random_request_config, weights=weights, k=self.num_prompts
