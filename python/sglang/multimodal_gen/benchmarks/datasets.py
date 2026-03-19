@@ -309,21 +309,17 @@ class RandomDataset(BaseDataset):
         return self.num_prompts
 
     def __getitem__(self, idx: int) -> RequestFuncInput:
-        params = {
-            "width": self.args.width,
-            "height": self.args.height,
-            "num_frames": self.args.num_frames,
-            "num_inference_steps": self.args.num_inference_steps,
-            "fps": self.args.fps,
-        }
-
-        if self._sampled_requests:
-            profile = self._sampled_requests[idx]
-            params.update(profile)
+        profile = self._sampled_requests[idx] if self._sampled_requests else {}
 
         return RequestFuncInput(
             prompt=f"Random prompt {idx} for benchmarking diffusion models",
             api_url=self.api_url,
             model=self.model,
-            **params,
+            width=profile.get("width", self.args.width),
+            height=profile.get("height", self.args.height),
+            num_frames=profile.get("num_frames", self.args.num_frames),
+            num_inference_steps=profile.get(
+                "num_inference_steps", self.args.num_inference_steps
+            ),
+            fps=profile.get("fps", self.args.fps),
         )
