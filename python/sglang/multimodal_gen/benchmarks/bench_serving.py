@@ -190,6 +190,8 @@ async def async_request_image_sglang(
 
         if input.width and input.height:
             payload["size"] = f"{input.width}x{input.height}"
+        if input.num_inference_steps:
+            payload["num_inference_steps"] = input.num_inference_steps
 
         # Merge extra parameters
         payload.update(input.extra_body)
@@ -298,6 +300,8 @@ async def async_request_video_sglang(
             payload["size"] = f"{input.width}x{input.height}"
         if input.num_frames:
             payload["num_frames"] = input.num_frames
+        if input.num_inference_steps:
+            payload["num_inference_steps"] = input.num_inference_steps
         if input.fps:
             payload["fps"] = input.fps
 
